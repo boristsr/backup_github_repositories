@@ -209,7 +209,38 @@ ForEach ($repository in $repositories) {
                 return
             }
 
-            git clone --quiet --mirror "https://${cloneUserName}:${cloneUserSecret}@github.com/${fullName}.git" "${directory}"
+            # Execute-Command from https://stackoverflow.com/a/33652732
+            function Get-CommandOutput($commandTitle, $commandPath, $commandArguments)
+            {
+                $obj = '' | Select-Object Error , Output , ErrorFile , OutputFile
+                $obj.ErrorFile = $env:temp + '\Error' + (Get-date).ToFileTime() + '' +'Get-Random' + '.txt'
+                $obj.OutputFile  = $env:temp + '\output' + (Get-date).ToFileTime() + '' +'Get-Random' + '.txt'
+                Start-Process -FilePath $commandPath -ArgumentList $commandArguments -RedirectStandardError $obj.ErrorFile -RedirectStandardOutput $obj.OutputFile
+                $obj.Error = Get-Content -Path $obj.ErrorFile 
+                $obj.output  = Get-Content -Path $obj.OutputFile
+                [pscustomobject]@{
+                    commandTitle = $commandTitle
+                    stdout = $p.StandardOutput.ReadToEnd()
+                    stderr = $p.StandardError.ReadToEnd()
+                    ExitCode = $p.ExitCode
+                }
+            }
+            
+            $fullCommand = 'git clone --quiet --mirror "https://${cloneUserName}:${cloneUserSecret}@github.com/${fullName}.git" "${directory}"'
+            $command = "git"
+            $arguments = 'clone --quiet --mirror "https://${cloneUserName}:${cloneUserSecret}@github.com/${fullName}.git" "${directory}"'
+            
+            #$output = Invoke-Expression $fullCommand -OutVariable output -ErrorVariable errors -ErrorAction SilentlyContinue
+            
+            #$process = Start-Process -FilePath $command -ArgumentList $arguments -windowstyle Hidden -PassThru -Wait
+            #Write-Host $process.ExitCode
+            
+            $output = Get-CommandOutput -commandTitle "git commands" -commandPath $command -commandArguments $arguments
+            Write-Host $output.stderr
+
+            #remote error: access denied or repository not exported
+            #Write-Host $process
+
             Write-Host "[${fullName}] Backup completed with git clone strategy."
         }
 
@@ -218,7 +249,7 @@ ForEach ($repository in $repositories) {
 
         Write-Host "[$($repository.full_name)] Starting backup to ${directory}..." -ForegroundColor "DarkYellow"
         Start-Job $scriptBlock -ArgumentList $repository.full_name, $directory, $userName, $userSecret | Out-Null
-        
+
         if ($repository.has_wiki -eq "true") {
             $wiki_full_name = "$($repository.full_name).wiki"
             $wiki_directory = $(Join-Path -Path $backupDirectory -ChildPath "$($repository.name).wiki.git")
