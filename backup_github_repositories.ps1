@@ -98,29 +98,6 @@ function Get-TotalRepositoriesSizeInMegabytes([Object] $repositories) {
     $([math]::Round($totalSizeInKilobytes/1024))
 }
 
-# Execute-Command from https://stackoverflow.com/a/33652732
-function Get-CommandOutput($commandTitle, $commandPath, $commandArguments)
-{
-    $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-    $pinfo.FileName = $commandPath
-    $pinfo.RedirectStandardError = $true
-    $pinfo.RedirectStandardOutput = $true
-    $pinfo.UseShellExecute = $false
-    $pinfo.Arguments = $commandArguments
-    $pinfo.WindowStyle = 'Hidden'
-    $pinfo.CreateNoWindow = $True
-    $p = New-Object System.Diagnostics.Process
-    $p.StartInfo = $pinfo
-    $p.Start() | Out-Null
-    $p.WaitForExit()
-    [pscustomobject]@{
-        commandTitle = $commandTitle
-        stdout = $p.StandardOutput.ReadToEnd()
-        stderr = $p.StandardError.ReadToEnd()
-        ExitCode = $p.ExitCode
-    }
-}
-
 # Measure the execution time of the backup script.
 $stopwatch = [System.Diagnostics.Stopwatch]::startNew()
 
@@ -164,7 +141,7 @@ Do {
     $paginatedGitHubApiUri = "${gitHubRepositoriesUrl}&page=${pageNumber}"
 
     Write-Host "Requesting '${paginatedGitHubApiUri}'..." -ForegroundColor "Yellow"
-    $paginatedRepositories = Invoke-WebRequest -Uri $paginatedGitHubApiUri -Headers $requestHeaders | `
+    $paginatedRepositories = Invoke-WebRequest -Uri $paginatedGitHubApiUri -Headers $requestHeaders -UseBasicParsing | `
                              Select-Object -ExpandProperty Content | `
                              ConvertFrom-Json
 
@@ -207,7 +184,21 @@ ForEach ($repository in $repositories) {
 
                 [Parameter(Mandatory=$true)]
                 [String]
-                $directory
+                $directory,
+                
+                [Parameter(
+                    Mandatory=$True,
+                    HelpMessage="The name of a GitHub user that has access to the GitHub API."
+                )]
+                [String]
+                $cloneUserName,
+                
+                [Parameter(
+                    Mandatory=$True,
+                    HelpMessage="The name of a GitHub user that has access to the GitHub API."
+                )]
+                [String]
+                $cloneUserSecret
             )
 
             if (Test-Path "${directory}") {
@@ -217,22 +208,8 @@ ForEach ($repository in $repositories) {
                 Write-Host "[${fullName}] Backup completed with git fetch strategy."
                 return
             }
-            
-            $fullCommand = 'git clone --quiet --mirror "https://${cloneUserName}:${cloneUserSecret}@github.com/${fullName}.git" "${directory}"'
-            $command = "git"
-            $arguments = 'clone --quiet --mirror "https://${cloneUserName}:${cloneUserSecret}@github.com/${fullName}.git" "${directory}"'
-            
-            #$output = Invoke-Expression $fullCommand -OutVariable output -ErrorVariable errors -ErrorAction SilentlyContinue
-            
-            #$process = Start-Process -FilePath $command -ArgumentList $arguments -windowstyle Hidden -PassThru -Wait
-            #Write-Host $process.ExitCode
-            
-            $output = Get-CommandOutput -commandTitle "git commands" -commandPath $command -commandArguments $arguments
-            Write-Host $output.stderr
 
-            #remote error: access denied or repository not exported
-            #Write-Host $process
-
+            git clone --quiet --mirror "https://${cloneUserName}:${cloneUserSecret}@github.com/${fullName}.git" "${directory}"
             Write-Host "[${fullName}] Backup completed with git clone strategy."
         }
 
@@ -240,7 +217,15 @@ ForEach ($repository in $repositories) {
         $directory = $(Join-Path -Path $backupDirectory -ChildPath "$($repository.name).git")
 
         Write-Host "[$($repository.full_name)] Starting backup to ${directory}..." -ForegroundColor "DarkYellow"
-        Start-Job $scriptBlock -ArgumentList $repository.full_name, $directory | Out-Null
+        Start-Job $scriptBlock -ArgumentList $repository.full_name, $directory, $userName, $userSecret | Out-Null
+        
+        if ($repository.has_wiki -eq "true") {
+            $wiki_full_name = "$($repository.full_name).wiki"
+            $wiki_directory = $(Join-Path -Path $backupDirectory -ChildPath "$($repository.name).wiki.git")
+            Write-Host "[${wiki_full_name}] Starting wiki backup to ${wiki_directory}..." -ForegroundColor "DarkYellow"
+            #TODO: Wikis are enabled by default on repos, but a wiki may not exist, so an ugly error appears here when no wiki exists, but it's not fatal
+            Start-Job $scriptBlock -ArgumentList $wiki_full_name, $wiki_directory, $userName, $userSecret | Out-Null
+        }
 
         # Give the job some time to start.
         $warmUpTimeoutInMilliseconds = 50
