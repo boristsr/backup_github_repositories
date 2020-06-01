@@ -217,10 +217,6 @@ ForEach ($repository in $repositories) {
                 Write-Host "[${fullName}] Backup completed with git fetch strategy."
                 return
             }
-
-<<<<<<< Updated upstream
-            git clone --quiet --mirror "git@github.com:${fullName}.git" "${directory}"
-=======
             
             $fullCommand = 'git clone --quiet --mirror "https://${cloneUserName}:${cloneUserSecret}@github.com/${fullName}.git" "${directory}"'
             $command = "git"
@@ -237,7 +233,6 @@ ForEach ($repository in $repositories) {
             #remote error: access denied or repository not exported
             #Write-Host $process
 
->>>>>>> Stashed changes
             Write-Host "[${fullName}] Backup completed with git clone strategy."
         }
 
