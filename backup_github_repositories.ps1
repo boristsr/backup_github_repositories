@@ -98,6 +98,29 @@ function Get-TotalRepositoriesSizeInMegabytes([Object] $repositories) {
     $([math]::Round($totalSizeInKilobytes/1024))
 }
 
+# Execute-Command from https://stackoverflow.com/a/33652732
+function Get-CommandOutput($commandTitle, $commandPath, $commandArguments)
+{
+    $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+    $pinfo.FileName = $commandPath
+    $pinfo.RedirectStandardError = $true
+    $pinfo.RedirectStandardOutput = $true
+    $pinfo.UseShellExecute = $false
+    $pinfo.Arguments = $commandArguments
+    $pinfo.WindowStyle = 'Hidden'
+    $pinfo.CreateNoWindow = $True
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $pinfo
+    $p.Start() | Out-Null
+    $p.WaitForExit()
+    [pscustomobject]@{
+        commandTitle = $commandTitle
+        stdout = $p.StandardOutput.ReadToEnd()
+        stderr = $p.StandardError.ReadToEnd()
+        ExitCode = $p.ExitCode
+    }
+}
+
 # Measure the execution time of the backup script.
 $stopwatch = [System.Diagnostics.Stopwatch]::startNew()
 
@@ -195,7 +218,26 @@ ForEach ($repository in $repositories) {
                 return
             }
 
+<<<<<<< Updated upstream
             git clone --quiet --mirror "git@github.com:${fullName}.git" "${directory}"
+=======
+            
+            $fullCommand = 'git clone --quiet --mirror "https://${cloneUserName}:${cloneUserSecret}@github.com/${fullName}.git" "${directory}"'
+            $command = "git"
+            $arguments = 'clone --quiet --mirror "https://${cloneUserName}:${cloneUserSecret}@github.com/${fullName}.git" "${directory}"'
+            
+            #$output = Invoke-Expression $fullCommand -OutVariable output -ErrorVariable errors -ErrorAction SilentlyContinue
+            
+            #$process = Start-Process -FilePath $command -ArgumentList $arguments -windowstyle Hidden -PassThru -Wait
+            #Write-Host $process.ExitCode
+            
+            $output = Get-CommandOutput -commandTitle "git commands" -commandPath $command -commandArguments $arguments
+            Write-Host $output.stderr
+
+            #remote error: access denied or repository not exported
+            #Write-Host $process
+
+>>>>>>> Stashed changes
             Write-Host "[${fullName}] Backup completed with git clone strategy."
         }
 
